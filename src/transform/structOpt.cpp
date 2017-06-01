@@ -339,7 +339,7 @@ StructOpt::optimizeAlloca(llvm::AllocaInst & allocaInst) {
 // we may transorm the alloc
 
   // replace alloca
-  auto * vecAlloc = new AllocaInst(vecAllocTy, allocaInst.getName(), &allocaInst);
+  auto * vecAlloc = new AllocaInst(vecAllocTy, 0, allocaInst.getName(), &allocaInst);
 
   const uint alignment = layout.getPrefTypeAlignment(vecAllocTy); // TODO should enfore a stricter alignment at this point
   vecInfo.setVectorShape(*vecAlloc, VectorShape::uni(alignment));
@@ -397,17 +397,20 @@ StructOpt::run() {
 
   numTransformed = 0;
   numPromoted = 0;
-
   bool change = false;
+  SmallVector<AllocaInst*, 8> allocas;
+
   for (auto & bb : vecInfo.getScalarFunction()) {
     auto itBegin = bb.begin(), itEnd = bb.end();
-    for (auto it = itBegin; it != itEnd; ) {
-      auto * allocaInst = dyn_cast<AllocaInst>(it++);
-      if (!allocaInst) continue;
-
-      bool changedAlloca = optimizeAlloca(*allocaInst);
-      change |= changedAlloca;
+    for (auto it = itBegin; it != itEnd;) {
+      auto *allocaInst = dyn_cast<AllocaInst>(it++);
+      if (allocaInst) allocas.push_back(allocaInst);
     }
+  }
+
+  for(auto alloca : allocas) {
+    bool changedAlloca = optimizeAlloca(*alloca);
+    change |= changedAlloca;
   }
 
   if (numTransformed > 0) {
@@ -421,6 +424,5 @@ StructOpt::run() {
 
   return change;
 }
-
 
 } // namespace rv

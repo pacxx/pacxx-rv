@@ -116,7 +116,7 @@ VectorizationInfo::VectorizationInfo(llvm::Function& parentFn, uint vectorWidth,
 : mapping(&parentFn, &parentFn, vectorWidth), region(&_region)
 {
     mapping.resultShape = VectorShape::uni();
-    for (auto& arg : parentFn.getArgumentList()) {
+    for (auto& arg : parentFn.args()) {
       mapping.argShapes.push_back(VectorShape::uni());
       setVectorShape(arg, VectorShape::uni());
     }
@@ -126,9 +126,8 @@ VectorizationInfo::VectorizationInfo(llvm::Function& parentFn, uint vectorWidth,
 VectorizationInfo::VectorizationInfo(VectorMapping _mapping)
 : mapping(_mapping), region(nullptr)
 {
-  assert(mapping.argShapes.size() == mapping.scalarFn->getArgumentList().size());
-  auto& argList = mapping.scalarFn->getArgumentList();
-  auto it = argList.begin();
+  assert(mapping.argShapes.size() == mapping.scalarFn->arg_size());
+  auto it = mapping.scalarFn->arg_begin();
   for (auto argShape : mapping.argShapes)
   {
     setVectorShape(*it, argShape);

@@ -71,8 +71,8 @@ void NatBuilder::vectorize(bool embedRegion, ValueToValueMapTy * vecInstMap) {
   // map arguments first
   if (!region) {
     unsigned i = 0;
-    auto sit = func->getArgumentList().begin();
-    for (auto it = vecFunc->getArgumentList().begin(), et = vecFunc->getArgumentList().end();
+    auto sit = func->arg_begin();
+    for (auto it = vecFunc->arg_begin(), et = vecFunc->arg_end();
          it != et; ++it, ++sit, ++i) {
       Argument *arg = &*it;
       const Argument *sarg = &*sit;
@@ -192,6 +192,7 @@ void NatBuilder::vectorize(BasicBlock *const bb, BasicBlock *vecBlock) {
     LoadInst *load = dyn_cast<LoadInst>(inst);
     StoreInst *store = dyn_cast<StoreInst>(inst);
     CallInst *call = dyn_cast<CallInst>(inst);
+    BinaryOperator *binOp = dyn_cast<BinaryOperator>(inst);
     GetElementPtrInst *gep = dyn_cast<GetElementPtrInst>(inst);
     AllocaInst *alloca = dyn_cast<AllocaInst>(inst);
 
@@ -240,7 +241,9 @@ void NatBuilder::vectorize(BasicBlock *const bb, BasicBlock *vecBlock) {
 //        vectorizeGEPInstruction(gep, lane, laneEnd == vectorWidth());
 //      }
       vectorizeGEPInstruction(gep, shouldVectorize(gep));
-    } else if (canVectorize(inst) && shouldVectorize(inst))
+    } else if (binOp && shouldVectorize(inst) && isDivision(binOp))
+      vectorizeDivision(binOp);
+    else if (canVectorize(inst) && shouldVectorize(inst))
       vectorize(inst);
     else if (!canVectorize(inst) && shouldVectorize(inst))
       fallbackVectorize(inst);
@@ -286,6 +289,74 @@ void NatBuilder::vectorizeAllocaInstruction(AllocaInst *const alloca) {
     mapVectorValue(alloca, vecAlloca);
 //  else
 //    mapScalarValue(alloca, vecAlloca);
+}
+
+//TODO currently we are guarding all divisions by a cascade to prevent possible division by zero
+void NatBuilder::vectorizeDivision(llvm::BinaryOperator* const division) {
+  assert(division && "no instruction to vectorize");
+  assert(isa<BinaryOperator>(division) && isDivision(division));
+  assert(builder.GetInsertBlock() && "no insertion point set");
+
+  Value *predicate = vectorizationInfo.getPredicate(*division->getParent());
+  assert(predicate && "expected predicate!");
+  assert(predicate->getType()->isIntegerTy(1) && "predicate must be i1 type!");
+
+  std::vector<BasicBlock *> condBlocks;
+  std::vector<BasicBlock *> maskedBlocks;
+
+  BasicBlock *vecBlock = cast<BasicBlock>(getVectorValue(division->getParent()));
+  BasicBlock * resBlock = createCascadeBlocks(vecBlock->getParent(), vectorWidth(), condBlocks, maskedBlocks);
+
+  // branch to our entry block of the cascade
+  builder.CreateBr(condBlocks[0]);
+  builder.SetInsertPoint(condBlocks[0]);
+
+  Value *resVec = UndefValue::get(getVectorType(division->getType(), vectorWidth()));
+
+  // create vectorWidth scalar div
+  for (unsigned lane = 0; lane < vectorWidth(); ++lane) {
+    BasicBlock *condBlock = nullptr;
+    BasicBlock *maskedBlock = nullptr;
+    BasicBlock *nextBlock = nullptr;
+
+    condBlock = condBlocks[lane];
+    maskedBlock = maskedBlocks[lane];
+    nextBlock = lane == vectorWidth() - 1 ? resBlock : condBlocks[lane + 1];
+
+    assert(builder.GetInsertBlock() == condBlock);
+    // do not map this value if it's fresh to avoid dominance violations
+    Value *mask = requestScalarValue(predicate, lane, true);
+    builder.CreateCondBr(mask, maskedBlock, nextBlock);
+    builder.SetInsertPoint(maskedBlock);
+
+    std::vector<Value *> args;
+    for (unsigned i = 0; i < division->getNumOperands(); ++i) {
+      Value *scalArg = division->getOperand(i);
+      // do not map this value if it's fresh to avoid dominance violations
+      Value *laneArg = requestScalarValue(scalArg, lane, true);
+      args.push_back(laneArg);
+    }
+
+    Twine suffix = "_lane_" + std::to_string(lane);
+    auto scalarName = division->getName();
+    auto vectorName = scalarName.empty() ? suffix : scalarName + suffix;
+    Value *newDivision = builder.CreateBinOp(division->getOpcode(), args[0], args[1], vectorName);
+
+    Value *insert = nullptr;
+    insert = builder.CreateInsertElement(resVec, newDivision, ConstantInt::get(i32Ty, lane),
+                                         "insert_lane_" + std::to_string(lane));
+    builder.CreateBr(nextBlock);
+    builder.SetInsertPoint(nextBlock);
+
+    PHINode *phi = builder.CreatePHI(resVec->getType(), 2);
+    phi->addIncoming(resVec, condBlock);
+    phi->addIncoming(insert, maskedBlock);
+    resVec = phi;
+  }
+
+    // map resVec as vector value for scalCall and remap parent block of scalCall with resBlock
+    mapVectorValue(division, resVec);
+    if (resBlock) mapVectorValue(division->getParent(), resBlock);
 }
 
 void NatBuilder::vectorizePHIInstruction(PHINode *const scalPhi) {
@@ -1244,7 +1315,7 @@ Value *NatBuilder::requestCascadeLoad(Value *vecPtr, unsigned alignment, Value *
   }
 
   // cast call argument to correct type if needed
-  Argument *ptrArg = &*func->getArgumentList().begin();
+  Argument *ptrArg = &*func->arg_begin();
   Value *callPtr = vecPtr;
 
   if (ptrArg->getType() != vecPtr->getType()) {
@@ -1274,7 +1345,7 @@ Value *NatBuilder::requestCascadeStore(Value *vecVal, Value *vecPtr, unsigned al
   }
 
   // cast call arguments to correct type if needed
-  auto argIt = func->getArgumentList().begin();
+  auto argIt = func->arg_begin();
   Argument *valArg = &*argIt++;
   Argument *ptrArg = &*argIt;
   Value *callVal = vecVal;
@@ -1320,7 +1391,7 @@ Function *NatBuilder::createCascadeMemory(VectorType *pointerVectorType, unsigne
   FunctionType *fnType = FunctionType::get(resType, argTypes, false);
   Function *func = Function::Create(fnType, GlobalValue::LinkageTypes::ExternalLinkage, name, mod);
 
-  auto argIt = func->getArgumentList().begin();
+  auto argIt = func->arg_begin();
   Argument *valVec = nullptr;
   if (store) {
     valVec = &*argIt++;
@@ -1870,4 +1941,19 @@ bool NatBuilder::shouldVectorize(Instruction *inst) {
   }
 
   return false;
+}
+
+bool NatBuilder::isDivision(llvm::BinaryOperator *binOp) {
+    auto op_code = binOp->getOpcode();
+    switch (op_code) {
+      case BinaryOperator::UDiv:
+      case BinaryOperator::SDiv:
+      case BinaryOperator::FDiv:
+      case BinaryOperator::URem:
+      case BinaryOperator::SRem:
+      case BinaryOperator::FRem:
+        return true;
+      default:
+        return false;
+    }
 }
