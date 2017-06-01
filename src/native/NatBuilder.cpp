@@ -337,8 +337,8 @@ void NatBuilder::vectorizeDivision(llvm::BinaryOperator* const division) {
       args.push_back(laneArg);
     }
 
-    Twine suffix = "_lane_" + std::to_string(lane);
-    auto scalarName = division->getName();
+    std::string suffix = "_lane_" + std::to_string(lane);
+    auto scalarName = division->getName().str();
     auto vectorName = scalarName.empty() ? suffix : scalarName + suffix;
     Value *newDivision = builder.CreateBinOp(division->getOpcode(), args[0], args[1], vectorName);
 
@@ -366,7 +366,7 @@ void NatBuilder::vectorizePHIInstruction(PHINode *const scalPhi) {
   Type *type = !shape.isVarying() || scalType->isVectorTy() || scalType->isStructTy() ?
                scalType : getVectorType(scalPhi->getType(), vectorWidth());
   auto name = !shape.isVarying() || scalType->isVectorTy() || scalType->isStructTy() ?
-              scalPhi->getName() : scalPhi->getName() + "_SIMD";
+              scalPhi->getName().str() : scalPhi->getName().str() + "_SIMD";
 
   // replicate phi <vector_width> times if type is not vectorizable
   unsigned loopEnd = shape.isVarying() && (scalType->isVectorTy() || scalType->isStructTy()) ? vectorWidth() : 1;
@@ -693,8 +693,8 @@ void NatBuilder::vectorizeCallInstruction(CallInst *const scalCall) {
                                             needCascade); // do not map this value if it's fresh to avoid dominance violations
         args.push_back(laneArg);
       }
-      Twine suffix = callType->isVoidTy() ? "" : "_lane_" + std::to_string(lane);
-      auto scalCallName = scalCall->getName();
+      std::string suffix = callType->isVoidTy() ? "" : "_lane_" + std::to_string(lane);
+      auto scalCallName = scalCall->getName().str();
       auto vecCallName = scalCallName.empty() ? suffix : scalCallName + suffix;
       Value *call = builder.CreateCall(callee, args, vecCallName);
       if (!needCascade)
