@@ -62,7 +62,7 @@ optClangLine="clang -march=native -O3 -c -emit-llvm -S  " # -fno-slp-vectorize"
 clangLine="clang++ -std=c++14 -march=native -m64 -O2 -fno-vectorize" # -fno-slp-vectorize"
 cClangLine="clang -march=native -m64 -O2 -fno-vectorize -fno-slp-vectorize"
 
-rvToolLine="./../bin/rvTool"
+rvToolLine="rvTool"
 
 def rvClang(clangArgs):
    return shellCmd(clangLine + " -Xclang -load -Xclang " + libRV + " -O3 " + clangArgs)
@@ -77,7 +77,7 @@ def buildScalarIR(srcFile):
     compileToIR(srcFile, scalarLL)
     return scalarLL
 
-def runOuterLoopVec(scalarLL, destFile, scalarName = "foo", loopDesc=None, logPrefix=None):
+def runOuterLoopVec(scalarLL, destFile, scalarName = "foo", loopDesc=None, logPrefix=None, width=None):
     baseName = plainName(scalarLL)
     cmd = rvToolLine + " -loopvec -i " + scalarLL
     if destFile:
@@ -86,10 +86,12 @@ def runOuterLoopVec(scalarLL, destFile, scalarName = "foo", loopDesc=None, logPr
       cmd = cmd + " -k " + scalarName
     if loopDesc:
       cmd = cmd + " -l " + loopDesc
+    if width:
+      cmd = cmd + " -w " + str(width)
 
     return shellCmd(cmd,  None, logPrefix)
 
-def runWFV(scalarLL, destFile, scalarName = "foo", shapes=None, logPrefix=None):
+def runWFV(scalarLL, destFile, scalarName = "foo", shapes=None, width=None, logPrefix=None):
     cmd = rvToolLine + " -wfv -lower -i " + scalarLL
     if destFile:
       cmd = cmd + " -o " + destFile
@@ -97,6 +99,8 @@ def runWFV(scalarLL, destFile, scalarName = "foo", shapes=None, logPrefix=None):
       cmd = cmd + " -k " + scalarName
     if shapes:
       cmd = cmd + " -s " + shapes
+    if width:
+      cmd = cmd + " -w " + str(width)
 
     return shellCmd(cmd,  None, logPrefix)
 
@@ -119,6 +123,7 @@ def requestLauncher(launchCode, prefix):
     return launcherLL
 
 def runWFVTest(testBC, launchCode, profileMode):
+    shellCmd(clangLine + " " + testBC + " -c -S -o " + testBC + ".s")
     try:
       caseName = plainName(testBC)
       if profileMode:

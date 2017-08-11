@@ -7,6 +7,27 @@ RV provides a unified interface to vectorize code regions, such as inner and out
 We had a poster on RV at the 2016 US LLVM Developers' Meeting (docs/poster_rv.pdf).
 RV is largely based on the Whole-Function Vectorizer by Ralf Karrenberg (http://www.cdl.uni-saarland.de/projects/wfv/).
 
+For any questions, please get in touch with Simon Moll (moll@cs.uni-saarland.de).
+
+
+-- Prerequesites --
+LLVM 4.0
+Clang (for the vector math libraries)
+compiler-rt [optional] (for complex arithmetic functions)
+
+-- Buildling libRV --
+RV is an LLVM tool and integrates into the LLVM build system.
+To enable vectorized complex arithmetic through compiler-rt checkout compiler-rt in llvm/runtimes and configure RV with RV_ENABLE_CRT=on. 
+Clone this repository into llvm/tools/rv where llvm is your LLVM source directory. RV will build along with LLVM.
+
+-- Testing libRV --
+Install LLVM+RV, go to rv/test/ and run ./test_rv.py.
+
+-- Getting started with the API --
+Users of RV should include its main header file include/rv/rv.h and supporting headers in include/rv.
+The command line tester (tool/rvTool.cpp) is a good starting point to learn how to use RVs API.
+
+
 -- Source structure --
 include/ - header files
 vecmath/ - SIMD library sources

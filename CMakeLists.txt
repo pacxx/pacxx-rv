@@ -91,6 +91,8 @@ endif ()
 
 # Options
 OPTION(RV_ENABLE_SLEEF "Generate RV's builtin vector-math library" ON)
+OPTION(RV_ENABLE_CRT "Implement complex math functions using BC-compiler compiler-rt" OFF)
+OPTION(RV_DEBUG "Enable verbose debug output and expensive internal checks." OFF)
 
 
 set(RV_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
