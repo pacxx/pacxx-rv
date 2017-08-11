@@ -66,6 +66,10 @@ public:
 template<bool forward>
 class DFGBase {
 public:
+
+    using DomTreeRef = typename std::conditional<forward, const llvm::DominatorTree&,
+                                                          const llvm::PostDominatorTree&>::type;
+
     class Node;
 
     using nodes_t = ArrayRef<const Node*>;
@@ -89,7 +93,7 @@ public:
 
     //----------------------------------------------------------------------------
 
-    DFGBase(const DominatorTreeBase<BasicBlock>& DT) : DT(DT)
+    DFGBase(DomTreeRef DT) : DT(DT)
     {
         assert (forward == !DT.isPostDominator() && "Wrong dominance tree specified!\n");
     }
@@ -104,7 +108,7 @@ public:
     Node* operator[](const BasicBlock* const BB) const { return get(BB); }
 
 private:
-    const DominatorTreeBase<BasicBlock>& DT;
+    DomTreeRef DT;
 
     Node* get(const BasicBlock* const BB) const
     {
