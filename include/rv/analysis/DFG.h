@@ -55,7 +55,27 @@ public:
         Info.setPreservesAll();
     }
 
-    bool runOnFunction(Function& F) override;
+      template <typename DomTree, typename std::enable_if<std::is_same<DomTree, DominatorTree>::value>::type* = nullptr>
+    void initialize(Function& F)
+    {
+      auto& DT = getAnalysis<DominatorTreeWrapperPass>().getDomTree();
+      mDFGBase = new DFGBase<forward>(DT);
+      mDFGBase->create(F);
+    }
+
+    template <typename DomTree, typename std::enable_if<std::is_same<DomTree, PostDominatorTree>::value>::type* = nullptr>
+    void initialize(Function& F)
+    {
+      auto& DT = getAnalysis<PostDominatorTreeWrapperPass>().getPostDomTree();
+      mDFGBase = new DFGBase<forward>(DT);
+      mDFGBase->create(F);
+    }
+
+    virtual bool runOnFunction(Function& F) override
+    {
+      initialize<typename std::conditional<forward, DominatorTree, PostDominatorTree>::type>(F);
+      return false;
+    }
 
     DFGBase<forward>* getDFG()
     {
@@ -67,9 +87,9 @@ template<bool forward>
 class DFGBase {
 public:
 
-    using DomTreeRef = typename std::conditional<forward, const llvm::DominatorTree&,
-                                                          const llvm::PostDominatorTree&>::type;
-
+    using DomTreeRef = typename std::conditional<forward,
+                                                  const llvm::DominatorTree&,
+                                                  const llvm::PostDominatorTree&>::type;
     class Node;
 
     using nodes_t = ArrayRef<const Node*>;

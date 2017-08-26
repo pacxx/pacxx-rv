@@ -342,7 +342,7 @@ Value *IRPolisher::getMaskForInst(Instruction *inst, unsigned bitWidth) {
     newStore->setAlignment(storeInst->getAlignment());
     newStore->setVolatile(storeInst->isVolatile());
     newStore->setOrdering(storeInst->getOrdering());
-    newStore->setSynchScope(storeInst->getSynchScope());
+    newStore->setSyncScopeID(storeInst->getSyncScopeID());
 
     newInst = newStore;
   } else if (auto loadInst = dyn_cast<LoadInst>(inst)) {
@@ -352,7 +352,7 @@ Value *IRPolisher::getMaskForInst(Instruction *inst, unsigned bitWidth) {
     newLoad->setAlignment(loadInst->getAlignment());
     newLoad->setVolatile(loadInst->isVolatile());
     newLoad->setOrdering(loadInst->getOrdering());
-    newLoad->setSynchScope(loadInst->getSynchScope());
+    newLoad->setSyncScopeID(loadInst->getSyncScopeID());
 
     newInst = getMaskForValue(builder, newLoad, bitWidth);
   } else if (auto phiNode = dyn_cast<PHINode>(inst)) {
@@ -440,7 +440,6 @@ bool IRPolisher::polish() {
   }
 
   IF_DEBUG { errs() << "Starting polishing phase\n"; }
-  std::unordered_set<ExtInst, ExtInst::Hash, ExtInst::Cmp> queue;
 
   // Run InstCombine to perform peephole opts
   FunctionPassManager FPM;
@@ -461,28 +460,12 @@ bool IRPolisher::polish() {
   }
 
   while (!queue.empty()) {
-    auto extInst = *queue.begin();
-    queue.erase(queue.begin());
     auto extInst = queue.front();
     queue.pop();
 
     // Extend the instruction to work on vector of integers instead of vectors of i1s
     auto inst = extInst.inst;
     auto bitWidth = extInst.bitWidth;
-    auto newInst = getMaskForInst(inst, bitWidth);
-
-    // Process the users of the instruction
-    if (isBooleanVector(inst->getType())) {
-      for (auto user : inst->users()) {
-        if (auto userInst = dyn_cast<Instruction>(user)) {
-          // Do not add instructions that have already been processed
-          if (!masks.count(ExtInst(userInst, bitWidth)))
-            queue.emplace(userInst, bitWidth);
-        }
-      }
-    } else {
-      inst->replaceAllUsesWith(newInst);
-    }
     getMaskForInst(inst, bitWidth);
   }
 
@@ -571,3 +554,4 @@ INITIALIZE_PASS_BEGIN(IRPolisherWrapper, "rv-irpolish",
                       "RV - Polish Vector IR", false, false)
 INITIALIZE_PASS_END(IRPolisherWrapper, "rv-irpolish", "RV - Polish Vector IR",
                     false, false)
+

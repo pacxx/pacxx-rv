@@ -104,11 +104,6 @@ namespace native {
     void vectorizeMemoryInstruction(llvm::Instruction *const inst);
     void vectorizeCallInstruction(llvm::CallInst *const scalCall);
     void vectorizeAllocaInstruction(llvm::AllocaInst *const alloca);
-    void vectorizeReductionCall(CallInst *rvCall, bool isRv_all);
-    void vectorizeExtractCall(CallInst *rvCall);
-    void vectorizeBallotCall(CallInst *rvCall);
-    GetElementPtrInst *vectorizeGEPInstruction(GetElementPtrInst *const gep, bool buildVectorGEP, unsigned interleavedIndex = 0,
-                                                bool skipMapping = false);
     void vectorizeReductionCall(llvm::CallInst *rvCall, bool isRv_all);
     void vectorizeExtractCall(llvm::CallInst *rvCall);
     void vectorizeInsertCall(llvm::CallInst *rvCall);
