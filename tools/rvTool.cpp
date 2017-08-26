@@ -147,8 +147,6 @@ vectorizeLoop(Function& parentFn, Loop& loop, uint vectorWidth, LoopInfo& loopIn
 
     // configure RV
     rv::Config config;
-    config.useAVX = true;
-    config.useAVX2 = true;
     config.useSLEEF = true;
     config.print(outs());
 
@@ -196,14 +194,14 @@ vectorizeLoop(Function& parentFn, Loop& loop, uint vectorWidth, LoopInfo& loopIn
 
     IF_DEBUG { errs() << "header phi " << phi->getName() << " has shape " << phiShape.str() << "\n"; }
 
-    if (phiShape.isDefined()) { vecInfo.setVectorShape(*phi, phiShape); }
+    if (phiShape.isDefined()) { vecInfo.setPinnedShape(*phi, phiShape); }
   }
 
   // set uniform overrides
   IF_DEBUG { errs() << "-- Setting remTrans uni overrides --\n"; }
   for (auto * val : uniOverrides) {
     IF_DEBUG { errs() << "- " << *val << "\n"; }
-    vecInfo.setVectorShape(*val, rv::VectorShape::uni());
+    vecInfo.setPinnedShape(*val, rv::VectorShape::uni());
   }
 
 
@@ -333,8 +331,6 @@ vectorizeFunction(rv::VectorMapping& vectorizerJob)
 
     // configure RV
     rv::Config config;
-    config.useAVX = true;
-    config.useAVX2 = true;
     config.useSLEEF = true;
     const bool useImpreciseFunctions = true;
     config.print(outs());

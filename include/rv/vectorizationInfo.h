@@ -35,13 +35,15 @@ class Region;
 class VectorizationInfo
 {
     VectorMapping mapping;
-    std::unordered_map<const llvm::BasicBlock*, llvm::WeakVH> predicates;
+    std::unordered_map<const llvm::BasicBlock*, llvm::TrackingVH<llvm::Value>> predicates;
     std::unordered_map<const llvm::Value*, VectorShape> shapes;
 
     std::set<const llvm::Loop*> mDivergentLoops;
     std::set<const llvm::BasicBlock*> NonKillExits;
 
     Region* region;
+
+    std::set<const llvm::Value*> pinned;
 
 public:
     bool inRegion(const llvm::Instruction & inst) const;
@@ -85,6 +87,15 @@ public:
     // whether this exit block terminates the loop
     bool isKillExit(const llvm::BasicBlock & block) const;
     void setNotKillExit(const llvm::BasicBlock* block);
+
+    /// Disable recomputation of this value's shape and make it effectvely final
+    const decltype(pinned) & pinned_values() const { return pinned; }
+    void setPinned(const llvm::Value&);
+    void setPinnedShape(const llvm::Value& v, VectorShape shape) {
+      setPinned(v);
+      setVectorShape(v, shape);
+    }
+    bool isPinned(const llvm::Value&) const;
 
     llvm::LLVMContext & getContext() const;
     llvm::Function & getScalarFunction() { return *mapping.scalarFn; }
