@@ -609,11 +609,11 @@ int main(int argc, char** argv)
           }
 
           // fail on excessive specification
-          if (argShapes.size() > scalarFn->getArgumentList().size())
+          if (argShapes.size() > scalarFn->arg_size())
               fail("too many arg shapes specified");
 
           // pad with uniform shapes
-          while (argShapes.size() < scalarFn->getArgumentList().size()) {
+          while (argShapes.size() < scalarFn->arg_size()) {
             argShapes.push_back(rv::VectorShape::uni());
           }
 
@@ -626,8 +626,8 @@ int main(int argc, char** argv)
       }
       else
       {
-        for (auto& it : scalarFn->getArgumentList()) {
-          (void) it;
+        for(auto I = scalarFn->arg_begin(), IE = scalarFn->arg_end(); I != IE; ++I) {
+          (void) I;
           argShapes.push_back(rv::VectorShape::uni());
         }
       }
