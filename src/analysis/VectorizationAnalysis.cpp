@@ -67,7 +67,7 @@ VAWrapperPass::runOnFunction(Function& F) {
   const LoopInfo& LoopInfo = getAnalysis<LoopInfoWrapperPass>().getLoopInfo();
 
   VectorizationAnalysis vea(config, platInfo, Vecinfo, cdg, dfg, LoopInfo);
-  vea.analyze();
+  vea.analyze(F);
 
   return false;
 }
@@ -88,48 +88,13 @@ VectorizationAnalysis::VectorizationAnalysis(Config _config,
 { }
 
 void
-VectorizationAnalysis::updateAnalysis(InstVec & updateList) {
-  auto & F = mVecinfo.getScalarFunction();
-  assert (!F.isDeclaration());
-
-  // start from instructions on the update list
-  for (auto * inst : updateList) mWorklist.push(inst);
-
-  compute(F);
-  fixUndefinedShapes(F);
-  computeLoopDivergence();
-
-  // mark all non-loop exiting branches as divergent to trigger a full linearization
-  if (config.foldAllBranches) {
-    for (auto & BB: F) {
-      auto & term = *BB.getTerminator();
-      if (term.getNumSuccessors() <= 1) continue; // uninteresting
-
-      if (!mVecinfo.inRegion(BB)) continue; // no begin vectorized
-
-      auto * loop = mLoopInfo.getLoopFor(&BB);
-      bool keepShape = loop && loop->isLoopExiting(&BB);
-
-      if (!keepShape) {
-        mVecinfo.setVectorShape(term, VectorShape::varying());
-      }
-    }
-  }
-
-
-  IF_DEBUG_VA {
-    errs() << "VecInfo after VA:\n";
-    mVecinfo.dump();
-  }
-}
-void
-VectorizationAnalysis::analyze() {
-  auto & F = mVecinfo.getScalarFunction();
+VectorizationAnalysis::analyze(const Function& F) {
   assert (!F.isDeclaration());
 
   init(F);
   compute(F);
   fixUndefinedShapes(F);
+  mVecinfo.clearInitialization();
   computeLoopDivergence();
 
   // mark all non-loop exiting branches as divergent to trigger a full linearization
@@ -203,21 +168,15 @@ void VectorizationAnalysis::init(const Function& F) {
   adjustValueShapes(F);
 
   // Propagation of vector shapes starts at values that do not depend on other values:
-  // - function argument's users
+  // - Initialization mapping
   // - Allocas (which are uniform at the beginning)
   // - PHIs with constants as incoming values
   // - Calls without arguments
 
-// push all users of pinned values
-  std::set<const Instruction*> seen;
-  for (auto * val : mVecinfo.pinned_values()) {
-    for(auto * user : val->users()) {
-      auto * inst = dyn_cast<Instruction>(user);
-      if (inst && seen.insert(inst).second) mWorklist.push(inst);
-    }
+  for (auto p : *mVecinfo.getInitialization()) {
+    update(p.first, p.second);
   }
 
-// push non-user instructions
   for (const BasicBlock& BB : F) {
     mVecinfo.setVectorShape(BB, VectorShape::uni());
 
@@ -409,7 +368,7 @@ void VectorizationAnalysis::compute(const Function& F) {
     const Instruction* I = mWorklist.front();
     mWorklist.pop();
 
-    if (mVecinfo.isPinned(*I)) {
+    if (mVecinfo.isPinned(I)) {
       continue;
     }
 
