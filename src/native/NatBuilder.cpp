@@ -478,7 +478,7 @@ void NatBuilder::mapOperandsInto(Instruction *const scalInst, Instruction *inst,
   // check for division. opcodes for divisions are (in order) UDiv, SDiv, FDiv. only care if non-trivial mask
   auto opCode = scalInst->getOpcode();
   auto * pred = vecInfo.getPredicate(*scalInst->getParent());
-  bool isPredicatedDiv = (opCode >= BinaryOperator::UDiv) && (opCode <= BinaryOperator::FDiv) && (pred && !isa<Constant>(pred));
+  bool isPredicatedDiv = (opCode >= BinaryOperator::UDiv) && (opCode <= BinaryOperator::FRem) && (pred && !isa<Constant>(pred));
 
   unsigned e = isa<CallInst>(scalInst) ? inst->getNumOperands() - 1 : inst->getNumOperands();
   for (unsigned i = 0; i < e; ++i) {
