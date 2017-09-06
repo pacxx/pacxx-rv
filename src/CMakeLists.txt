@@ -71,6 +71,8 @@ add_rv_library(RV
   ${RV_HEADER_FILES}
 )
 
+install(TARGETS RV DESTINATION lib)
+
 if (TARGET gensleef)
   target_link_libraries(RV PRIVATE gensleef)
 ENDIF()
