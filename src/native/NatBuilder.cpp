@@ -812,6 +812,15 @@ static bool HasSideEffects(CallInst &call) {
   return call.mayHaveSideEffects();
 }
 
+static bool isBlacklistedIntrinsic(Intrinsic::ID id){
+  switch (id){
+  case llvm::Intrinsic::memset:
+    return true;
+  default:
+    return false;
+  }
+}
+
 void NatBuilder::vectorizeCallInstruction(CallInst *const scalCall) {
   Value * callee = scalCall->getCalledValue();
   StringRef calleeName = callee->getName();
@@ -882,7 +891,8 @@ void NatBuilder::vectorizeCallInstruction(CallInst *const scalCall) {
 
       ++numSemiCalls;
 
-    } else if (calledFunction && calledFunction->isIntrinsic() && Intrinsic::isOverloaded(calledFunction->getIntrinsicID())) {
+    } else if (calledFunction && calledFunction->isIntrinsic() && Intrinsic::isOverloaded(calledFunction->getIntrinsicID())
+        && !isBlacklistedIntrinsic(calledFunction->getIntrinsicID())) {
         // decode ambiguous type arguments
         auto id = calledFunction->getIntrinsicID();
         auto * funcTy = calledFunction->getFunctionType();
