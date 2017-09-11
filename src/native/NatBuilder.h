@@ -107,6 +107,8 @@ namespace native {
     void vectorizeReductionCall(llvm::CallInst *rvCall, bool isRv_all);
     void vectorizeExtractCall(llvm::CallInst *rvCall);
     void vectorizeInsertCall(llvm::CallInst *rvCall);
+    void vectorizeLoadCall(llvm::CallInst *rvCall);
+    void vectorizeStoreCall(llvm::CallInst *rvCall);
     void vectorizeShuffleCall(llvm::CallInst *rvCall);
     void vectorizeBallotCall(llvm::CallInst *rvCall);
     void vectorizeAlignCall(llvm::CallInst *rvCall);
@@ -140,8 +142,8 @@ namespace native {
     llvm::GetElementPtrInst *buildGEP(llvm::GetElementPtrInst *const gep, bool buildScalar, unsigned laneIdx);
     llvm::GetElementPtrInst *requestVectorGEP(llvm::GetElementPtrInst *const gep);
     llvm::GetElementPtrInst *requestScalarGEP(llvm::GetElementPtrInst *const gep, unsigned laneIdx, bool skipMapping);
-    llvm::BitCastInst *requestVectorBitCast(llvm::BitCastInst *const bc);
-    llvm::BitCastInst *requestScalarBitCast(llvm::BitCastInst *const bc, unsigned laneIdx, bool skipMapping);
+    llvm::Value *requestVectorBitCast(llvm::BitCastInst *const bc);
+    llvm::Value *requestScalarBitCast(llvm::BitCastInst *const bc, unsigned laneIdx, bool skipMapping);
 
     llvm::GetElementPtrInst *requestInterleavedGEP(llvm::GetElementPtrInst *const gep, unsigned interleavedIdx);
     llvm::Value *requestInterleavedAddress(llvm::Value *const addr, unsigned interleavedIdx, llvm::Type *const vecType);

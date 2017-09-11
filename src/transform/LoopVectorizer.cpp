@@ -163,8 +163,13 @@ LoopVectorizer::vectorizeLoop(Loop &L) {
 
   int VectorWidth = getVectorWidth(L);
   if (VectorWidth < 0) {
-    if (enableDiagOutput) Report() << "loopVecPass skip: won't vectorize " << L.getName() << " . Vector width was " << VectorWidth << "\n";
-    return false;
+    char * userWidthText = getenv("W");
+    if (!userWidthText) {
+      if (enableDiagOutput) Report() << "loopVecPass skip: won't vectorize " << L.getName() << " . Dep dist " << depDist << " Vector width was " << VectorWidth << "\n";
+      return false;
+    }
+    VectorWidth = atoi(userWidthText);
+    if (enableDiagOutput) Report() << "loopVecPass: continueing with user-provided vector width (env W); " << VectorWidth << "\n";
   }
 
   // if (tripAlign % VectorWidth != 0) {
@@ -239,7 +244,7 @@ LoopVectorizer::vectorizeLoop(Loop &L) {
   IF_DEBUG { errs() << "-- Setting remTrans uni overrides --\n"; }
   for (auto * val : uniOverrides) {
     IF_DEBUG { errs() << "- " << *val << "\n"; }
-    vecInfo.setVectorShape(*val, VectorShape::uni());
+    vecInfo.setPinnedShape(*val, VectorShape::uni());
   }
 
   //DT.verifyDomTree();

@@ -32,6 +32,7 @@
 
 #include "rv/transform/Linearizer.h"
 
+#include "rv/transform/splitAllocas.h"
 #include "rv/transform/structOpt.h"
 #include "rv/transform/srovTransform.h"
 #include "rv/transform/irPolisher.h"
@@ -92,6 +93,26 @@ VectorizerInterface::addIntrinsics() {
             0, // no specific vector width
             -1, //
             VectorShape::varying(),
+            {VectorShape::varying(), VectorShape::uni(), VectorShape::uni()}
+          );
+          platInfo.addSIMDMapping(mapping);
+        } else if (func.getName() == "rv_load") {
+          VectorMapping mapping(
+            &func,
+            &func,
+            0, // no specific vector width
+            -1, //
+            VectorShape::uni(),
+            {VectorShape::varying(), VectorShape::uni()}
+          );
+          platInfo.addSIMDMapping(mapping);
+        } else if (func.getName() == "rv_store") {
+          VectorMapping mapping(
+            &func,
+            &func,
+            0, // no specific vector width
+            -1, //
+            VectorShape::uni(),
             {VectorShape::varying(), VectorShape::uni(), VectorShape::uni()}
           );
           platInfo.addSIMDMapping(mapping);
@@ -283,6 +304,14 @@ VectorizerInterface::linearize(VectorizationInfo& vecInfo,
 // flag is set if the env var holds a string that starts on a non-'0' char
 bool
 VectorizerInterface::vectorize(VectorizationInfo &vecInfo, DominatorTree &domTree, LoopInfo & loopInfo, ScalarEvolution & SE, MemoryDependenceResults & MDR, ValueToValueMapTy * vecInstMap) {
+  // split structural allocas
+  if (config.enableSplitAllocas) {
+    SplitAllocas split(vecInfo);
+    split.run();
+  } else {
+    Report() << "Split allocas opt disabled (RV_DISABLE_SPLITALLOCAS != 0)\n";
+  }
+
   // transform allocas from Array-of-struct into Struct-of-vector where possibe
   if (config.enableStructOpt) {
     StructOpt sopt(vecInfo, platInfo.getDataLayout());
@@ -345,6 +374,22 @@ static void lowerIntrinsicCall(CallInst* call) {
     lowerIntrinsicCall(call, [] (const CallInst* call) {
       return call->getOperand(2);
     });
+  } else if (callee->getName() == "rv_load") {
+    lowerIntrinsicCall(call, [] (CallInst* call) {
+      IRBuilder<> builder(call);
+      auto * ptrTy = PointerType::get(builder.getFloatTy(), call->getOperand(0)->getType()->getPointerAddressSpace());
+      auto * ptrCast = builder.CreatePointerCast(call->getOperand(0), ptrTy);
+      auto * gep = builder.CreateGEP(ptrCast, { call->getOperand(1) });
+      return builder.CreateLoad(gep);
+    });
+  } else if (callee->getName() == "rv_store") {
+    lowerIntrinsicCall(call, [] (CallInst* call) {
+      IRBuilder<> builder(call);
+      auto * ptrTy = PointerType::get(builder.getFloatTy(), call->getOperand(0)->getType()->getPointerAddressSpace());
+      auto * ptrCast = builder.CreatePointerCast(call->getOperand(0), ptrTy);
+      auto * gep = builder.CreateGEP(ptrCast, { call->getOperand(1) });
+      return builder.CreateStore(call->getOperand(2), gep);
+    });
   } else if (callee->getName() == "rv_ballot") {
     lowerIntrinsicCall(call, [] (CallInst* call) {
       IRBuilder<> builder(call);
@@ -355,7 +400,7 @@ static void lowerIntrinsicCall(CallInst* call) {
 
 void
 lowerIntrinsics(Module & mod) {
-  const char* names[] = {"rv_any", "rv_all", "rv_extract", "rv_insert", "rv_shuffle", "rv_ballot", "rv_align"};
+  const char* names[] = {"rv_any", "rv_all", "rv_extract", "rv_insert", "rv_load", "rv_store", "rv_shuffle", "rv_ballot", "rv_align"};
   for (int i = 0, n = sizeof(names) / sizeof(names[0]); i < n; i++) {
     auto func = mod.getFunction(names[i]);
     if (!func) continue;

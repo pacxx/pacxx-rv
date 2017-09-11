@@ -26,6 +26,56 @@ using namespace llvm;
 
 namespace rv {
 
+static bool
+IsDecomposable(Type & ty) {
+  return isa<StructType>(ty) || isa<ArrayType>(ty) || isa<VectorType>(ty);
+}
+
+static bool
+IsLifetimeUse(Instruction & userInst) {
+  // look through bc (to i8 presumably)
+  auto * bc = dyn_cast<BitCastInst>(&userInst);
+  auto & ptrUser = bc ? *bc : userInst;
+
+  // that pointer must only be used in lifetimes
+  auto * call = dyn_cast<CallInst>(&ptrUser);
+  if (!call) return false;
+  auto * callee = dyn_cast<Function>(call->getCalledValue());
+  if (!callee) return false;
+
+  if ((callee->getIntrinsicID() != Intrinsic::lifetime_start) &&
+      (callee->getIntrinsicID() != Intrinsic::lifetime_end)) {
+    return false;
+  }
+
+  // ok
+  return true;
+}
+
+static bool
+IsLoadStoreIntrinsicUse(Value * userInst) {
+  if (auto call = dyn_cast<CallInst>(userInst)) {
+    auto * callee = dyn_cast<Function>(call->getCalledValue());
+    return callee && (callee->getName() == "rv_load" || callee->getName() == "rv_store");
+  } else if (auto bitcast = dyn_cast<BitCastInst>(userInst)) {
+    for (auto user : bitcast->users()) {
+      if (!IsLoadStoreIntrinsicUse(user)) return false;
+    }
+    return true;
+  }
+
+  return false;
+}
+
+static void
+RemapLoadStoreIntrinsicShape(Value * userInst, VectorizationInfo & vecInfo) {
+  if (auto bitcast = dyn_cast<BitCastInst>(userInst)) {
+    for (auto user : bitcast->users()) {
+      RemapLoadStoreIntrinsicShape(user, vecInfo);
+    }
+    vecInfo.setVectorShape(*userInst, VectorShape::uni());
+  }
+}
 
 // TODO move this into vecInfo
 VectorShape
@@ -128,7 +178,7 @@ StructOpt::transformLayout(llvm::AllocaInst & allocaInst, ValueToValueMapTy & tr
   // have seen this user
     if (!seen.insert(inst).second) continue;
 
-    auto * allocaInst = dyn_cast<AllocaInst>(inst);
+    // auto * allocaInst = dyn_cast<AllocaInst>(inst);
     auto * store = dyn_cast<StoreInst>(inst);
     auto * load = dyn_cast<LoadInst>(inst);
     auto * gep = dyn_cast<GetElementPtrInst>(inst);
@@ -177,8 +227,23 @@ StructOpt::transformLayout(llvm::AllocaInst & allocaInst, ValueToValueMapTy & tr
       vecInfo.dropVectorShape(*phi);
       transformMap[phi] = vecPhi;
 
+    // important: this case has to become *before* the CastInst case (lifetime pattern is more general)
+    } else if (IsLifetimeUse(*inst)) {
+      // remap BC operand
+      inst->replaceUsesOfWith(&allocaInst, transformMap[&allocaInst]);
+      continue; // skip lifetime/BC users
+
+    } else if (IsLoadStoreIntrinsicUse(inst)) {
+      for (size_t i = 0, n = inst->getNumOperands(); i < n; ++i) {
+        if (transformMap.count(inst->getOperand(i)) != 0)
+          inst->setOperand(i, transformMap[inst->getOperand(i)]);
+      }
+
+      RemapLoadStoreIntrinsicShape(inst, vecInfo);
+      continue;
+
     } else {
-      assert(allocaInst && "unexpected instruction in alloca transformation");
+      assert(isa<AllocaInst>(inst) && "unexpected instruction in alloca transformation");
     }
 
   // update users users
@@ -203,6 +268,9 @@ StructOpt::transformLayout(llvm::AllocaInst & allocaInst, ValueToValueMapTy & tr
   for (auto deadVal : seen) {
     auto *deadInst = cast<Instruction>(deadVal);
     assert(deadInst);
+    // keep the load/store intrinsics
+    if (IsLoadStoreIntrinsicUse(deadInst)) continue;
+
     if (!deadInst->getType()->isVoidTy()) {
       deadInst->replaceAllUsesWith(UndefValue::get(deadInst->getType()));
     }
@@ -248,6 +316,7 @@ StructOpt::allUniformGeps(llvm::AllocaInst & allocaInst) {
   // inspect users
     for (auto user : inst->users()) {
       auto * userInst = dyn_cast<Instruction>(user);
+      IF_DEBUG_SO { errs() << "inspecting user " << *userInst << "\n"; }
 
       if (!userInst) continue;
 
@@ -271,6 +340,48 @@ StructOpt::allUniformGeps(llvm::AllocaInst & allocaInst) {
           return false;
         }
         continue;
+      }
+
+      // use by lifetime.start/end marker / intrinsics
+      else if (IsLifetimeUse(*userInst) || IsLoadStoreIntrinsicUse(userInst)) continue;
+
+      // see through bitcasts
+      else if (isa<CastInst>(userInst)) {
+        IF_DEBUG_SO { errs() << "\t cast transition (restricted patterns apply):\n"; }
+        if (!userInst->getType()->isPointerTy()) {
+            IF_DEBUG_SO { errs() << "skip: casting alloca-derived pointer to int : " << *userInst << "\n"; }
+          return false;
+        }
+
+        bool needCompatibleType = false;
+        // TODO only accept a BC+store pattern (since we are here, the GEP itself seems to be valie)
+        for (auto & bcUse : userInst->uses()) {
+          auto * subInst = dyn_cast<Instruction>(bcUse.getUser());
+          IF_DEBUG_SO { errs() << "sub use: " << *subInst << "\n"; }
+          if (isa<StoreInst>(subInst)) {
+            IF_DEBUG_SO { errs() << "sub store!\n"; }
+            needCompatibleType = true;
+            if (bcUse.getOperandNo() != 1) { // leaking the value!
+              IF_DEBUG_SO { errs() << "skip: (BC guarded use) store leaks value: " << *subInst << "\n";  }
+              return false;
+            }
+          }
+          else if (isa<LoadInst>(subInst)) { IF_DEBUG_SO { errs() << "sub load!\n"; } needCompatibleType = true; continue; }
+          else if (IsLifetimeUse(*subInst)) { IF_DEBUG_SO { errs() << "sub lifetime use!\n"; } continue; }
+          else if (IsLoadStoreIntrinsicUse(subInst)) { IF_DEBUG_SO { errs() << "sub load/store intrinsic use!\n"; } needCompatibleType = true; continue; }
+          else {
+            IF_DEBUG_SO { errs() << "skip: (BC guarded use) will not accept other uses than loads and stores : " << *subInst << "\n"; }
+            return false;
+          }
+        }
+
+        // if the pointer is used to access data make sure that the store size is identical
+        if (needCompatibleType) {
+          if (layout.getTypeAllocSize(userInst->getType()->getPointerElementType()) != layout.getTypeAllocSize(inst->getType()->getPointerElementType())) {
+            IF_DEBUG_SO { errs() << "skip: casting to non-aligned type (that is accessed) : " << *userInst << "\n"; }
+            return false;
+          }
+        }
       }
 
       // skip unforeseen users
@@ -310,21 +421,18 @@ StructOpt::allUniformGeps(llvm::AllocaInst & allocaInst) {
   return true;
 }
 
-static bool
-IsDecomposable(Type & ty) {
-  return isa<StructType>(ty) || isa<ArrayType>(ty) || isa<VectorType>(ty);
-}
-
 bool
 StructOpt::shouldPromote(llvm::AllocaInst & allocaInst) {
   if (!IsDecomposable(*allocaInst.getType()->getPointerElementType())) return false;
 
 // check that the alloca is only ever accessed as a whole (no GEPs)
   for (auto & use : allocaInst.uses()) {
-    auto * load = dyn_cast<LoadInst>(use.getUser());
-    auto * store = dyn_cast<StoreInst>(use.getUser());
-    if (!load && !store) {
-      IF_DEBUG_SO { errs() << "\t non-load/store user -> can not promote\n";}
+    auto * inst = dyn_cast<Instruction>(use.getUser());
+    if (!inst) continue;
+    auto * load = dyn_cast<LoadInst>(inst);
+    auto * store = dyn_cast<StoreInst>(inst);
+    if (!load && !store && !IsLifetimeUse(*inst)) {
+      IF_DEBUG_SO { errs() << "\t non-load/store user " << *inst << " -> can not promote\n";}
       return false;
     }
     if (store) {
