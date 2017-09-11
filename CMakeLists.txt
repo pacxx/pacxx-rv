@@ -89,12 +89,36 @@ else ()
   set(LLVM_SOURCE_ROOT "${LLVM_MAIN_SRC_DIR}")
 endif ()
 
+# check target arch from triple
+function(string_starts_with str search)
+  string(FIND "${str}" "${search}" out)
+  if("${out}" EQUAL 0)
+    return(true)
+  endif()
+  return(false)
+endfunction()
+
+set(RV_BUILD_SLEEF_ARM OFF)
+set(RV_BUILD_SLEEF_X86 OFF)
+
+string(FIND "${TARGET_TRIPLE}" "x86" found_x86)
+string(FIND "${TARGET_TRIPLE}" "aarch" found_arm)
+
+if ("${found_x86}" EQUAL 0)
+  set(RV_BUILD_SLEEF_X86 ON)
+  set(RV_ENABLE_X86 ON)
+endif()
+if ("${found_arm}" EQUAL 0)
+  set(RV_BUILD_SLEEF_ARM ON)
+  set(RV_ENABLE_ADVSIMD ON)
+endif()
+
 # Options
 OPTION(RV_ENABLE_SLEEF "Generate RV's builtin vector-math library" ON)
 OPTION(RV_ENABLE_CRT "Implement complex math functions using BC-compiler compiler-rt" OFF)
 OPTION(RV_DEBUG "Enable verbose debug output and expensive internal checks." OFF)
-OPTION(RV_ENABLE_ADVSIMD "Enable advanced SIMD (use this only on arm)." OFF)
-OPTION(RV_ENABLE_X86 "Enable SLEEF x86 support (use this only on x86)." OFF)
+OPTION(RV_ENABLE_ADVSIMD "Enable advanced SIMD (use this only on arm)." ${RV_BUILD_SLEEF_ARM})
+OPTION(RV_ENABLE_X86 "Enable SLEEF x86 support (use this only on x86)." ${RV_BUILD_SLEEF_X86})
 
 
 # check enabled targets
