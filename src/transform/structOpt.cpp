@@ -243,6 +243,8 @@ StructOpt::transformLayout(llvm::AllocaInst & allocaInst, ValueToValueMapTy & tr
       continue;
 
     } else {
+      inst->dump();
+      inst->getOperand(0)->dump();
       assert(isa<AllocaInst>(inst) && "unexpected instruction in alloca transformation");
     }
 
