@@ -47,7 +47,6 @@ add_rv_library(RV
   sleefLibrary.cpp
   transform/CNSPass.cpp
   transform/Linearizer.cpp
-  #  transform/LoopVectorizer.cpp
   transform/bosccTransform.cpp
   transform/cns/BlockGraph.cpp
   transform/cns/CNS.cpp
@@ -61,7 +60,6 @@ add_rv_library(RV
   transform/maskExpander.cpp
   transform/redTools.cpp
   transform/redOpt.cpp
-  #  transform/remTransform.cpp
   transform/srovTransform.cpp
   transform/structOpt.cpp
   transform/splitAllocas.cpp
