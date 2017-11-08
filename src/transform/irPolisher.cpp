@@ -227,9 +227,21 @@ Value *IRPolisher::replaceSelectInst(IRBuilder<> &builder, llvm::SelectInst *sel
   // If the select is part of a min/max pattern, try to keep the pattern intact
   auto cmpInst = dyn_cast<CmpInst>(selectInst->getOperand(0));
   if (cmpInst) {
+    // Do not break unsafe min/max patterns
+    FastMathFlags oldFMF;
+    if (isa<FPMathOperator>(cmpInst)) {
+        oldFMF = cmpInst->getFastMathFlags();
+        FastMathFlags newFMF = oldFMF;
+        newFMF.setFast();
+        cmpInst->setFastMathFlags(newFMF);
+    }
+
     Value *left, *right;
     Instruction::CastOps castOp;
     auto selectPattern = matchSelectPattern(selectInst, left, right, &castOp);
+
+    if (isa<FPMathOperator>(cmpInst)) cmpInst->setFastMathFlags(oldFMF);
+
     if (SelectPatternResult::isMinOrMax(selectPattern.Flavor)) {
       auto cmpClone = builder.Insert(cmpInst->clone());
       auto selectClone = builder.Insert(selectInst->clone());
@@ -450,7 +462,7 @@ bool IRPolisher::polish() {
   FPM.run(F, FAM);
 
   visitedInsts.clear();
-  queue = std::move(std::queue<ExtInst>());
+  queue = std::queue<ExtInst>();
 
   // Fill the queue with uses of the result of vector (f)cmps
   for (auto it = inst_begin(F), end = inst_end(F); it != end; ++it) {

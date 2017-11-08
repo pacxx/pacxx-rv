@@ -785,7 +785,7 @@ NatBuilder::vectorizeStoreCall(CallInst *rvCall) {
 // non-uniform arg
   auto * vecVal = requestVectorValue(vecPtr);
   auto * lanePtr = builder.CreateExtractElement(vecVal, laneId, "rv_store");
-  auto * store = builder.CreateStore(elemVal, lanePtr, "rv_store");
+  auto * store = builder.CreateStore(elemVal, lanePtr);
   mapScalarValue(rvCall, store);
 }
 
@@ -2466,7 +2466,7 @@ void
 NatBuilder::materializeVaryingReduction(Reduction & red, PHINode & scaPhi) {
   assert((red.kind != RedKind::Top) && (red.kind != RedKind::Bot));
 
-  const int vectorWidth = vecInfo.getVectorWidth();
+  const size_t vectorWidth = vecInfo.getVectorWidth();
   auto * vecPhi = cast<PHINode>(getVectorValue(&scaPhi));
   auto redShape = red.getShape(vectorWidth);
   assert(redShape.isVarying());

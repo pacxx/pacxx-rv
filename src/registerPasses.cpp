@@ -62,7 +62,7 @@ registerRVPasses(const llvm::PassManagerBuilder &Builder,
     PM.add(rv::createCNSPass());
     return;
   }
-  */
+  
 
   if (rvLoopVecEnabled) {
     // PM.add(rv::createCNSPass());
@@ -76,6 +76,7 @@ registerRVPasses(const llvm::PassManagerBuilder &Builder,
     PM.add(createInstructionCombiningPass());
     PM.add(createAggressiveDCEPass());
   }
+  */
 }
 
 

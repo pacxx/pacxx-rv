@@ -47,7 +47,7 @@ add_rv_library(RV
   sleefLibrary.cpp
   transform/CNSPass.cpp
   transform/Linearizer.cpp
-  transform/LoopVectorizer.cpp
+  #  transform/LoopVectorizer.cpp
   transform/bosccTransform.cpp
   transform/cns/BlockGraph.cpp
   transform/cns/CNS.cpp
@@ -61,7 +61,7 @@ add_rv_library(RV
   transform/maskExpander.cpp
   transform/redTools.cpp
   transform/redOpt.cpp
-  transform/remTransform.cpp
+  #  transform/remTransform.cpp
   transform/srovTransform.cpp
   transform/structOpt.cpp
   transform/splitAllocas.cpp
@@ -113,7 +113,7 @@ endif()
 # Build a monolithic Polly.a and a thin module LLVMPolly.moduleext that links to
 # that static library.
 if (MSVC)
-  # Add dummy target, because loadable modules are not supported on Windows
+# Add dummy target, because loadable modules are not supported on Windows
   add_custom_target(LLVMRV)
   set_target_properties(LLVMRV PROPERTIES FOLDER "rv")
 else ()
@@ -124,7 +124,7 @@ else ()
 target_link_libraries(LLVMRV PRIVATE RV)
 
 set_target_properties(LLVMRV
-    PROPERTIES
-    LINKER_LANGUAGE CXX
-    PREFIX "")
+   PROPERTIES
+   LINKER_LANGUAGE CXX
+   PREFIX "")
 endif ()

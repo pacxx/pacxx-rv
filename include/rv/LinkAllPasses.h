@@ -39,7 +39,7 @@ struct RVForcePassLinking {
     if (std::getenv("bar") != (char *)-1)
       return;
 
-    rv::createLoopVectorizerPass();
+//    rv::createLoopVectorizerPass();
     rv::createIRPolisherWrapperPass();
     rv::createCNSPass();
   }

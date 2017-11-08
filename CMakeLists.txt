@@ -120,6 +120,9 @@ OPTION(RV_DEBUG "Enable verbose debug output and expensive internal checks." OFF
 OPTION(RV_ENABLE_ADVSIMD "Enable advanced SIMD (use this only on arm)." ${RV_BUILD_SLEEF_ARM})
 OPTION(RV_ENABLE_X86 "Enable SLEEF x86 support (use this only on x86)." ${RV_BUILD_SLEEF_X86})
 
+set(RV_TARGETS_TO_BUILD "Native" CACHE STRING "Semicolon-separated list of targets to build, or 'Native'.")
+string(REPLACE "Native" ${LLVM_NATIVE_ARCH} RV_TARGETS_TO_BUILD "${RV_TARGETS_TO_BUILD}")
+list(REMOVE_DUPLICATES RV_TARGETS_TO_BUILD)
 
 # check enabled targets
 #IF (X86 IN_LIST LLVM_TARGETS_TO_BUILD)
@@ -137,7 +140,7 @@ OPTION(RV_ENABLE_X86 "Enable SLEEF x86 support (use this only on x86)." ${RV_BUI
 
 set(RV_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(RV_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR})
-set(RV_INCLUDE_DIR ${RV_SOURCE_DIR}/include CACHE INTERNAL "")
+set(RV_INCLUDE_DIR ${RV_SOURCE_DIR}/include PARENT_SCOPE)
 
 # Add path for custom modules
 set(CMAKE_MODULE_PATH
@@ -197,7 +200,7 @@ add_subdirectory(vecmath)
 
 add_subdirectory(src)
 
-add_subdirectory(tools)
+#add_subdirectory(tools)
 
 # Add target to check formatting of polly files
 file( GLOB_RECURSE files *.h src/*.cpp src/*.c tools/*.cpp tools/*.c tools/*.h)
