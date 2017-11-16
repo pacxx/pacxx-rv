@@ -1896,11 +1896,23 @@ NatBuilder::buildGEP(GetElementPtrInst *const gep, bool buildScalar, unsigned la
     idxList.push_back(vecIdx);
   }
 
+  // FIXME: This is a workaround for IRBuilder's ConstantFolder
+  //        to prevent the IRBuilder to craete a ConstantExpr
+  //        instead of an instruction.
+  //        We insert a noop bitcast to hide the constness of
+  //        vecBasePtr here. Other passes (e.g., InstCombine) 
+  //        will remove this noop instruction later.
+  bool insert = false; 
+  if (isa<Constant>(vecBasePtr)){
+    vecBasePtr = new BitCastInst(vecBasePtr, vecBasePtr->getType());
+    insert = true;
+  }
   GetElementPtrInst *vecGEP = cast<GetElementPtrInst>(builder.CreateGEP(vecBasePtr, idxList, gep->getName()));
+  if (insert)
+    cast<Instruction>(vecBasePtr)->insertBefore(vecGEP);
   vecGEP->setIsInBounds(gep->isInBounds());
 
   builder.SetInsertPoint(insertBlock, insertPoint);
-
   return vecGEP;
 }
 
