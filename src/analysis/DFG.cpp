@@ -1,4 +1,3 @@
-
 #include "rv/analysis/DFG.h"
 #include "llvm/IR/CFG.h"
 
@@ -8,14 +7,37 @@ using namespace llvm;
 template<> char DFGBaseWrapper<true>::ID = 0;
 template<> char DFGBaseWrapper<false>::ID = 0;
 
-template<bool forward>
-DFGBase<forward>::~DFGBase() {
+template<>
+bool DFGBaseWrapper<true>::runOnFunction(Function& F)
+{
+    DominatorTreeBase<BasicBlock, true>& tree = static_cast<DominatorTreeBase<BasicBlock, true>&>(getAnalysis<PostDominatorTreeWrapperPass>().getPostDomTree());
+
+    mDFGBase = new DFGBase<true>(tree);
+    mDFGBase->create(F);
+    return false;
+}
+
+template<>
+bool DFGBaseWrapper<false>::runOnFunction(Function& F)
+{
+    DominatorTreeBase<BasicBlock, false>& tree = static_cast<DominatorTreeBase<BasicBlock, false>&>(getAnalysis<DominatorTreeWrapperPass>().getDomTree());
+
+    mDFGBase = new DFGBase<false>(tree);
+    mDFGBase->create(F);
+    return false;
+}
+
+
+
+
+template<bool backward>
+DFGBase<backward>::~DFGBase() {
   for (auto it : nodes_)
     delete it.second;
 }
 
-template<bool forward>
-void DFGBase<forward>::create(Function& F) {
+template<bool backward>
+void DFGBase<backward>::create(Function& F) {
   auto const getIdom = [&](const BasicBlock* const BB) {
     auto idomNode = DT.getNode(const_cast<BasicBlock*>(BB));
     auto idom = idomNode ? idomNode->getIDom() : nullptr;
@@ -33,7 +55,7 @@ void DFGBase<forward>::create(Function& F) {
     BasicBlock* const idom = getIdom(BB);
     if (idom == nullptr) continue;
 
-    if (forward) { /* Dominance Frontier Graph */
+    if (!backward) { /* Dominance Frontier Graph */
       pred_iterator pi       = pred_begin(BB);
       pred_iterator const E  = pred_end(BB);
       for (; pi != E; ++pi) {
@@ -71,12 +93,11 @@ template class DFGBase<false>;
 
 FunctionPass* createDFGPass()
 {
-    return new DFGBaseWrapper<true>();
+    return new DFGBaseWrapper<false>();
 }
 
 FunctionPass* createCDGPass()
 {
-    return new DFGBaseWrapper<false>();
+    return new DFGBaseWrapper<true>();
 }
 }
-

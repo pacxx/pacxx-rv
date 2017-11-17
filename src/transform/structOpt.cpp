@@ -243,8 +243,6 @@ StructOpt::transformLayout(llvm::AllocaInst & allocaInst, ValueToValueMapTy & tr
       continue;
 
     } else {
-      inst->dump();
-      inst->getOperand(0)->dump();
       assert(isa<AllocaInst>(inst) && "unexpected instruction in alloca transformation");
     }
 
@@ -507,7 +505,7 @@ StructOpt::optimizeAlloca(llvm::AllocaInst & allocaInst) {
 // we may transorm the alloc
 
   // replace alloca
-  auto * vecAlloc = new AllocaInst(vecAllocTy, 0, allocaInst.getName(), &allocaInst);
+  auto * vecAlloc = new AllocaInst(vecAllocTy, allocaInst.getType()->getAddressSpace(), allocaInst.getName(), &allocaInst);
 
   const uint alignment = layout.getPrefTypeAlignment(vecAllocTy); // TODO should enfore a stricter alignment at this point
   vecInfo.setVectorShape(*vecAlloc, VectorShape::uni(alignment));
@@ -594,4 +592,3 @@ StructOpt::run() {
 
 
 } // namespace rv
-

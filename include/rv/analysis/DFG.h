@@ -9,7 +9,7 @@
 /// \file
 ///
 /// Implements a Dominance Frontier Graph (DFG) parametric in the direction the
-/// CFG is looked at.  If we compute the DFG with forward = false, the result is
+/// CFG is looked at.  If we compute the DFG with backward = false, the result is
 /// a Control Dependence Graph (CDG).
 ///
 /// In the DFG, the predecessors of a node form the dominance frontier set.
@@ -35,11 +35,11 @@
 
 
 namespace llvm {
-template<bool forward> class DFGBase;
+template<bool backward> class DFGBase;
 
-template<bool forward>
+template<bool backward>
 class DFGBaseWrapper : public FunctionPass {
-    DFGBase<forward>* mDFGBase;
+    DFGBase<backward>* mDFGBase;
 public:
     static char ID;
 
@@ -47,7 +47,7 @@ public:
 
     void getAnalysisUsage(AnalysisUsage& Info) const override
     {
-        if (forward)
+        if (backward)
             Info.addRequired<DominatorTreeWrapperPass>();
         else
             Info.addRequired<PostDominatorTreeWrapperPass>();
@@ -59,7 +59,7 @@ public:
     void initialize(Function& F)
     {
       auto& DT = getAnalysis<DominatorTreeWrapperPass>().getDomTree();
-      mDFGBase = new DFGBase<forward>(DT);
+      mDFGBase = new DFGBase<backward>(DT);
       mDFGBase->create(F);
     }
 
@@ -67,7 +67,7 @@ public:
     void initialize(Function& F)
     {
       auto& DT = getAnalysis<PostDominatorTreeWrapperPass>().getPostDomTree();
-      mDFGBase = new DFGBase<forward>(DT);
+      mDFGBase = new DFGBase<backward>(DT);
       mDFGBase->create(F);
     }
 
@@ -77,13 +77,14 @@ public:
       return false;
     }
 
-    DFGBase<forward>* getDFG()
+
+    DFGBase<backward>* getDFG()
     {
         return mDFGBase;
     }
 };
 
-template<bool forward>
+template<bool backward>
 class DFGBase {
 public:
 
@@ -95,7 +96,7 @@ public:
     using nodes_t = ArrayRef<const Node*>;
 
     class Node {
-        friend class DFGBase<forward>;
+        friend class DFGBase<backward>;
 
         explicit Node(BasicBlock* const BB) : BB(BB) { }
 
@@ -115,7 +116,7 @@ public:
 
     DFGBase(DomTreeRef DT) : DT(DT)
     {
-        assert (forward == !DT.isPostDominator() && "Wrong dominance tree specified!\n");
+        assert (backward == DT.isPostDominator() && "Wrong dominance tree specified!\n");
     }
 
     DFGBase(const DFGBase&) = delete;
@@ -146,10 +147,10 @@ private:
 template<> char DFGBaseWrapper<true>::ID;
 template<> char DFGBaseWrapper<false>::ID;
 
-using DFGWrapper = DFGBaseWrapper<true>;
-using CDGWrapper = DFGBaseWrapper<false>;
-using DFG = DFGBase<true>;  /* Dominance Frontier Graph */
-using CDG = DFGBase<false>; /* Control Dependence Graph */
+using DFGWrapper = DFGBaseWrapper<false>;
+using CDGWrapper = DFGBaseWrapper<true>;
+using DFG = DFGBase<false>;  /* Dominance Frontier Graph */
+using CDG = DFGBase<true>; /* Control Dependence Graph */
 using DFNode = DFG::Node;
 using CDNode = CDG::Node;
 

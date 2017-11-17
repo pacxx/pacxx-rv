@@ -482,7 +482,7 @@ void NatBuilder::mapOperandsInto(Instruction *const scalInst, Instruction *inst,
   // check for division. opcodes for divisions are (in order) UDiv, SDiv, FDiv. only care if non-trivial mask
   auto opCode = scalInst->getOpcode();
   auto * pred = vecInfo.getPredicate(*scalInst->getParent());
-  bool isPredicatedDiv = (opCode >= BinaryOperator::UDiv) && (opCode <= BinaryOperator::FRem) && (pred && !isa<Constant>(pred));
+  bool isPredicatedDiv = (opCode >= BinaryOperator::UDiv) && (opCode <= BinaryOperator::FDiv) && (pred && !isa<Constant>(pred));
 
   unsigned e = isa<CallInst>(scalInst) ? inst->getNumOperands() - 1 : inst->getNumOperands();
   for (unsigned i = 0; i < e; ++i) {
@@ -874,15 +874,6 @@ static bool HasSideEffects(CallInst &call) {
   return call.mayHaveSideEffects();
 }
 
-static bool isBlacklistedIntrinsic(Intrinsic::ID id){
-  switch (id){
-  case llvm::Intrinsic::memset:
-    return true;
-  default:
-    return false;
-  }
-}
-
 void NatBuilder::vectorizeCallInstruction(CallInst *const scalCall) {
   Value * callee = scalCall->getCalledValue();
   StringRef calleeName = callee->getName();
@@ -953,8 +944,7 @@ void NatBuilder::vectorizeCallInstruction(CallInst *const scalCall) {
 
       ++numSemiCalls;
 
-    } else if (calledFunction && calledFunction->isIntrinsic() && Intrinsic::isOverloaded(calledFunction->getIntrinsicID())
-        && !isBlacklistedIntrinsic(calledFunction->getIntrinsicID())) {
+    } else if (calledFunction && calledFunction->isIntrinsic() && Intrinsic::isOverloaded(calledFunction->getIntrinsicID())) {
         // decode ambiguous type arguments
         auto id = calledFunction->getIntrinsicID();
         auto * funcTy = calledFunction->getFunctionType();
@@ -1466,6 +1456,9 @@ Value *NatBuilder::createVaryingMemory(Type *vecType, unsigned int alignment, Va
   maskNonConst ? (scatter ? ++numMaskedScatter : ++numMaskedGather) : (scatter ? ++numScatter : ++numGather);
 
   if (config.useScatterGatherIntrinsics) {
+
+    auto * vecPtrTy = addr->getType();
+
     std::vector<Value *> args;
     if (scatter) args.push_back(values);
     args.push_back(addr);
@@ -1474,8 +1467,7 @@ Value *NatBuilder::createVaryingMemory(Type *vecType, unsigned int alignment, Va
     if (!scatter) args.push_back(UndefValue::get(vecType));
     Module *mod = vecInfo.getMapping().vectorFn->getParent();
 
-    auto vecPtrType = cast<VectorType>(addr->getType());
-    Type *OverloadedTypes[] = {vecType, vecPtrType};
+    Type *OverloadedTypes[] = {vecType, vecPtrTy};
 
     Function *intr = scatter ? Intrinsic::getDeclaration(mod, Intrinsic::masked_scatter, OverloadedTypes)
                              : Intrinsic::getDeclaration(mod, Intrinsic::masked_gather, OverloadedTypes);
@@ -1896,23 +1888,11 @@ NatBuilder::buildGEP(GetElementPtrInst *const gep, bool buildScalar, unsigned la
     idxList.push_back(vecIdx);
   }
 
-  // FIXME: This is a workaround for IRBuilder's ConstantFolder
-  //        to prevent the IRBuilder to craete a ConstantExpr
-  //        instead of an instruction.
-  //        We insert a noop bitcast to hide the constness of
-  //        vecBasePtr here. Other passes (e.g., InstCombine) 
-  //        will remove this noop instruction later.
-  bool insert = false; 
-  if (isa<Constant>(vecBasePtr)){
-    vecBasePtr = new BitCastInst(vecBasePtr, vecBasePtr->getType());
-    insert = true;
-  }
   GetElementPtrInst *vecGEP = cast<GetElementPtrInst>(builder.CreateGEP(vecBasePtr, idxList, gep->getName()));
-  if (insert)
-    cast<Instruction>(vecBasePtr)->insertBefore(vecGEP);
   vecGEP->setIsInBounds(gep->isInBounds());
 
   builder.SetInsertPoint(insertBlock, insertPoint);
+
   return vecGEP;
 }
 
@@ -2078,6 +2058,7 @@ Value *NatBuilder::requestCascadeLoad(Value *vecPtr, unsigned alignment, Value *
   // cast call argument to correct type if needed
   Argument *ptrArg = &*func->arg_begin();
   Value *callPtr = vecPtr;
+
   if (ptrArg->getType() != vecPtr->getType()) {
     callPtr = builder.CreateBitCast(callPtr, ptrArg->getType(), "bc");
   }
@@ -2478,10 +2459,10 @@ void
 NatBuilder::materializeVaryingReduction(Reduction & red, PHINode & scaPhi) {
   assert((red.kind != RedKind::Top) && (red.kind != RedKind::Bot));
 
-  const size_t vectorWidth = vecInfo.getVectorWidth();
+  const auto vectorWidth = vecInfo.getVectorWidth();
   auto * vecPhi = cast<PHINode>(getVectorValue(&scaPhi));
   auto redShape = red.getShape(vectorWidth);
-  assert(redShape.isVarying());
+  assert(redShape.isVarying()); (void) redShape;
 
 // construct new (vectorized) initial value
   // TODO generalize to multi phi reductions

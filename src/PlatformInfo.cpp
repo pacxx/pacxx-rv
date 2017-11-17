@@ -162,10 +162,9 @@ VectorMapping *PlatformInfo::inferMapping(llvm::Function &scalarFnc,
   rv::VectorShapeVec argShapes;
 
   auto itScalarArg = scalarFnc.arg_begin();
-
   auto itSimdArg = simdFnc.arg_begin();
 
-  for (uint i = 0; i < simdFnc.arg_size(); ++i) {
+  for (size_t i = 0; i < simdFnc.arg_size(); ++i) {
     // mask special case
     if (maskPos >= 0 && (i == (uint)maskPos)) {
       argShapes.push_back(VectorShape::varying());
