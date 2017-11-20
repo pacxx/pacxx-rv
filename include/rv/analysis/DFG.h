@@ -55,28 +55,7 @@ public:
         Info.setPreservesAll();
     }
 
-      template <typename DomTree, typename std::enable_if<std::is_same<DomTree, DominatorTree>::value>::type* = nullptr>
-    void initialize(Function& F)
-    {
-      auto& DT = getAnalysis<DominatorTreeWrapperPass>().getDomTree();
-      mDFGBase = new DFGBase<backward>(DT);
-      mDFGBase->create(F);
-    }
-
-    template <typename DomTree, typename std::enable_if<std::is_same<DomTree, PostDominatorTree>::value>::type* = nullptr>
-    void initialize(Function& F)
-    {
-      auto& DT = getAnalysis<PostDominatorTreeWrapperPass>().getPostDomTree();
-      mDFGBase = new DFGBase<backward>(DT);
-      mDFGBase->create(F);
-    }
-
-    virtual bool runOnFunction(Function& F) override
-    {
-      initialize<typename std::conditional<forward, DominatorTree, PostDominatorTree>::type>(F);
-      return false;
-    }
-
+    bool runOnFunction(Function& F) override;
 
     DFGBase<backward>* getDFG()
     {
@@ -87,10 +66,6 @@ public:
 template<bool backward>
 class DFGBase {
 public:
-
-    using DomTreeRef = typename std::conditional<forward,
-                                                  const llvm::DominatorTree&,
-                                                  const llvm::PostDominatorTree&>::type;
     class Node;
 
     using nodes_t = ArrayRef<const Node*>;
@@ -114,7 +89,7 @@ public:
 
     //----------------------------------------------------------------------------
 
-    DFGBase(DomTreeRef DT) : DT(DT)
+    DFGBase(const DominatorTreeBase<BasicBlock, backward>& DT) : DT(DT)
     {
         assert (backward == DT.isPostDominator() && "Wrong dominance tree specified!\n");
     }
@@ -129,7 +104,7 @@ public:
     Node* operator[](const BasicBlock* const BB) const { return get(BB); }
 
 private:
-    DomTreeRef DT;
+    const DominatorTreeBase<BasicBlock, backward>& DT;
 
     Node* get(const BasicBlock* const BB) const
     {

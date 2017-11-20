@@ -3,7 +3,7 @@
 
 
 using namespace llvm;
-
+namespace llvm{
 template<> char DFGBaseWrapper<true>::ID = 0;
 template<> char DFGBaseWrapper<false>::ID = 0;
 
@@ -26,9 +26,6 @@ bool DFGBaseWrapper<false>::runOnFunction(Function& F)
     mDFGBase->create(F);
     return false;
 }
-
-
-
 
 template<bool backward>
 DFGBase<backward>::~DFGBase() {
@@ -87,7 +84,6 @@ void DFGBase<backward>::create(Function& F) {
 
 //------------------------------------------------------------------------------
 
-namespace llvm {
 template class DFGBase<true>;
 template class DFGBase<false>;
 
