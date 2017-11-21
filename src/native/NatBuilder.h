@@ -79,7 +79,10 @@ namespace native {
     // create a mask cascade at the current insertion point, call @genFunc in every cascaded block, if @packResult insert all values provided by @genFunc into
     // an accumulator and return that (result size 1). If !@packResult return dominating definitions of the computed value
     // @genFunc: first argument is an IRBuilder that inserts into a fresh mask-guarded block, second argument is the lane for which the instruction @inst should be scalarized
-    ValVec scalarizeCascaded(llvm::BasicBlock & srcBlock, llvm::Instruction & inst, bool packResult, std::function<llvm::Value*(llvm::IRBuilder<>&,size_t)> genFunc);
+    ValVec scalarizeCascaded(llvm::BasicBlock & srcBlock, llvm::Instruction & srcInst, bool packResult, std::function<llvm::Value*(llvm::IRBuilder<>&,size_t)> genFunc);
+
+    // scalarize without if-guard
+    ValVec scalarize(llvm::BasicBlock & srcBlock, llvm::Instruction & srcInst, bool packResult, std::function<llvm::Value*(llvm::IRBuilder<>&,size_t)> genFunc);
 
   public:
     NatBuilder(rv::Config config, rv::PlatformInfo &_platformInfo, rv::VectorizationInfo &_vecInfo,
@@ -99,7 +102,7 @@ namespace native {
 
   private:
     void vectorize(llvm::BasicBlock *const bb, llvm::BasicBlock *vecBlock);
-    void vectorize(llvm::Instruction *const inst);
+    void vectorizeInstruction(llvm::Instruction *const inst);
     void vectorizePHIInstruction(llvm::PHINode *const scalPhi);
     void vectorizeMemoryInstruction(llvm::Instruction *const inst);
     void vectorizeCallInstruction(llvm::CallInst *const scalCall);
@@ -139,13 +142,13 @@ namespace native {
     llvm::Value *requestVectorValue(llvm::Value *const value);
     llvm::Value *requestScalarValue(llvm::Value *const value, unsigned laneIdx = 0,
                                     bool skipMapping = false);
-    llvm::GetElementPtrInst *buildGEP(llvm::GetElementPtrInst *const gep, bool buildScalar, unsigned laneIdx);
-    llvm::GetElementPtrInst *requestVectorGEP(llvm::GetElementPtrInst *const gep);
-    llvm::GetElementPtrInst *requestScalarGEP(llvm::GetElementPtrInst *const gep, unsigned laneIdx, bool skipMapping);
+    llvm::Value *buildGEP(llvm::GetElementPtrInst *const gep, bool buildScalar, unsigned laneIdx);
+    llvm::Value *requestVectorGEP(llvm::GetElementPtrInst *const gep);
+    llvm::Value *requestScalarGEP(llvm::GetElementPtrInst *const gep, unsigned laneIdx, bool skipMapping);
     llvm::Value *requestVectorBitCast(llvm::BitCastInst *const bc);
     llvm::Value *requestScalarBitCast(llvm::BitCastInst *const bc, unsigned laneIdx, bool skipMapping);
 
-    llvm::GetElementPtrInst *requestInterleavedGEP(llvm::GetElementPtrInst *const gep, unsigned interleavedIdx);
+    llvm::Value *requestInterleavedGEP(llvm::GetElementPtrInst *const gep, unsigned interleavedIdx);
     llvm::Value *requestInterleavedAddress(llvm::Value *const addr, unsigned interleavedIdx, llvm::Type *const vecType);
 
     llvm::Value *requestCascadeLoad(llvm::Value *vecPtr, unsigned alignment, llvm::Value *mask);
