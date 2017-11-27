@@ -7,6 +7,7 @@ using namespace rv;
 template<> char DFGBaseWrapper<true>::ID = 0;
 template<> char DFGBaseWrapper<false>::ID = 0;
 
+namespace rv{
 template<>
 bool DFGBaseWrapper<true>::runOnFunction(llvm::Function& F)
 {
@@ -26,7 +27,7 @@ bool DFGBaseWrapper<false>::runOnFunction(llvm::Function& F)
     mDFGBase->create(F);
     return false;
 }
-
+}
 
 
 
