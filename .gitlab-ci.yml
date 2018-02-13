@@ -1,0 +1,13 @@
+---
+variables:
+    GIT_STRATEGY: none
+before_script:
+  - pacxx-sync-repo tools/rv ../pacxx-llvm.git
+build:
+  image: hpc2se/pacxx-ci:ubuntu-16.04
+  script:
+    - with-ci-ccache -- pacxx-standard-test
+
+  tags:
+    - epic
+
