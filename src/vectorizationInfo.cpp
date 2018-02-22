@@ -16,6 +16,7 @@
 #include <llvm/Analysis/LoopInfo.h>
 
 #include "rv/region/Region.h"
+#include "rvConfig.h"
 
 using namespace llvm;
 
@@ -119,6 +120,7 @@ VectorizationInfo::VectorizationInfo(llvm::Function& parentFn, uint vectorWidth,
 {
     mapping.resultShape = VectorShape::uni();
     for (auto& arg : parentFn.args()) {
+      RV_UNUSED(arg);
       mapping.argShapes.push_back(VectorShape::uni());
     }
 }
@@ -223,13 +225,11 @@ VectorizationInfo::setPredicate(const llvm::BasicBlock& block, llvm::Value& pred
 
 void
 VectorizationInfo::setLoopDivergence(const Loop & loop, bool toUniform) {
-  mDivergentLoops.erase(&loop);
-}
-
-void
-VectorizationInfo::setDivergentLoop(const Loop* loop)
-{
-    mDivergentLoops.insert(loop);
+  if (toUniform) {
+    mDivergentLoops.erase(&loop);
+  } else {
+    mDivergentLoops.insert(&loop);
+  }
 }
 
 bool

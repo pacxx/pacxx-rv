@@ -225,7 +225,6 @@ void VectorizationAnalysis::init(const Function& F) {
       if (isa<AllocaInst>(&I)) {
         update(&I, VectorShape::uni(mVecinfo.getMapping().vectorWidth));
       } else if (const CallInst* call = dyn_cast<CallInst>(&I)) {
-        if (call->getFunctionType()->getReturnType()->isVoidTy()) continue;
         if (call->getNumArgOperands() != 0) continue;
 
         mWorklist.push(&I);
@@ -314,6 +313,15 @@ void VectorizationAnalysis::analyzeDivergence(const BranchInst* const branch) {
         inst.printAsOperand(errs(), false);
         errs() << "\n";
       };
+    }
+  }
+
+  for (const auto* BB : BDA.getControlDependentBlocks(*branch)) {
+    mControlDivergentBlocks.insert(BB);
+    for (const auto& inst : *BB) {
+      if (isa<TerminatorInst>(inst) || !inst.getType()->isVoidTy())
+        continue;
+      mWorklist.push(&inst);
     }
   }
 }
@@ -603,9 +611,6 @@ VectorShape VectorizationAnalysis::computeShapeForInst(const Instruction* I) {
       const Function * callee = dyn_cast<Function>(calledValue);
       if (!callee) return VectorShape::varying(); // calling a non-function
 
-      assert (!callee->getReturnType()->isVoidTy());
-
-
       // If the function is rv_align, use the alignment information
       if (callee->getName() == "rv_align") {
         auto shape = getShape(I->getOperand(0));
@@ -643,6 +648,17 @@ VectorShape VectorizationAnalysis::computeShapeForInst(const Instruction* I) {
     {
       const Value* pointer = I->getOperand(0);
       return VectorShape::join(VectorShape::uni(), getShape(pointer));
+    }
+
+    case Instruction::Store:
+    {
+      const Value* pointer = I->getOperand(0);
+      const Value* value = I->getOperand(1);
+      auto storeOpShape = VectorShape::join(getShape(value), getShape(pointer));
+      if (storeOpShape.isUniform() && mControlDivergentBlocks.count(I->getParent())) {
+        return VectorShape::varying();
+      }
+      return storeOpShape;
     }
 
     case Instruction::Select:
@@ -779,8 +795,9 @@ VectorShape VectorizationAnalysis::computeShapeForBinaryInst(const BinaryOperato
     {
       if (shape1.isUniform() && shape2.isUniform()) return VectorShape::uni(alignment1 / alignment2);
 
-      if (const ConstantInt* constantOp = dyn_cast<ConstantInt>(op2)) {
-        const int c = (int) constantOp->getSExtValue();
+      const ConstantInt* constDivisor = dyn_cast<ConstantInt>(op2);
+      if (shape1.hasStridedShape() && constDivisor) {
+        const int c = (int) constDivisor->getSExtValue();
         if (stride1 % c == 0) return VectorShape::strided(stride1 / c, alignment1 / std::abs(c));
       }
 
@@ -903,7 +920,7 @@ void VectorizationAnalysis::computeLoopDivergence() {
 
     for (const BasicBlock* exit : exits) {
       if (mVecinfo.getVectorShape(*exit).isVarying()) {
-        mVecinfo.setDivergentLoop(l);
+        mVecinfo.setLoopDivergence(*l, false);
         break;
       }
     }

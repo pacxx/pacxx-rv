@@ -25,12 +25,15 @@ if (RV_DEBUG)
 endif()
 
 add_rv_library(RV
+  annotations.cpp
   PlatformInfo.cpp
   VectorizationInfoProxyPass.cpp
   analysis/BranchDependenceAnalysis.cpp
+  analysis/costModel.cpp
   analysis/DFG.cpp
   analysis/VectorizationAnalysis.cpp
   analysis/reductionAnalysis.cpp
+  analysis/reductions.cpp
   analysis/DivPathDecider.cpp
   config.cpp
   init.cpp
@@ -44,6 +47,8 @@ add_rv_library(RV
   report.cpp
   rv.cpp
   rvConfig.cpp
+  rvDebug.cpp
+  passes.cpp
   sleefLibrary.cpp
   transform/CNSPass.cpp
   transform/Linearizer.cpp
@@ -108,7 +113,7 @@ elseif (LLVM_LINK_LLVM_DYLIB)
   )
 endif()
 
-# Build a monolithic Polly.a and a thin module LLVMPolly.moduleext that links to
+# Build a monolithic libRV.a and a thin module LLVMRV.moduleext that links to
 # that static library.
 if (MSVC)
 # Add dummy target, because loadable modules are not supported on Windows

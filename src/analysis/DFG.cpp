@@ -1,11 +1,12 @@
 #include "rv/analysis/DFG.h"
 #include "llvm/IR/CFG.h"
 
+namespace rv {
 
-using namespace rv;
-
+#ifndef _MSC_VER
 template<> char DFGBaseWrapper<true>::ID = 0;
 template<> char DFGBaseWrapper<false>::ID = 0;
+#endif
 
 namespace rv{
 template<>
@@ -80,7 +81,6 @@ void DFGBase<backward>::create(llvm::Function& F) {
 
 //------------------------------------------------------------------------------
 
-namespace rv {
 template class DFGBase<true>;
 template class DFGBase<false>;
 

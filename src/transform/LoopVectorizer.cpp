@@ -19,9 +19,11 @@
 #include "rv/region/Region.h"
 #include "rv/sleefLibrary.h"
 #include "rv/analysis/reductionAnalysis.h"
+#include "rv/analysis/costModel.h"
 #include "rv/transform/remTransform.h"
 
 #include "rvConfig.h"
+#include "rv/rvDebug.h"
 
 #include "llvm/IR/Verifier.h"
 #include "llvm/IR/Instructions.h"
@@ -177,7 +179,19 @@ LoopVectorizer::vectorizeLoop(Loop &L) {
   //   return false;
   // }
 
-  // TODO check legality
+// pick a vectorization factor
+  CostModel costModel(vectorizer->getPlatformInfo());
+  LoopRegion tmpLoopRegionImpl(L);
+  Region tmpLoopRegion(tmpLoopRegionImpl);
+  size_t refinedWidth = costModel.pickWidthForRegion(tmpLoopRegion, VectorWidth); // TODO run VA first
+
+  if (refinedWidth <= 1) {
+    if (enableDiagOutput) { errs() << "loopVecPass, costModel: vectorization not beneficial\n"; }
+    return false;
+  } else if (refinedWidth != VectorWidth) {
+    if (enableDiagOutput) { errs() << "loopVecPass, costModel: refined vector width to " << refinedWidth << " from " << VectorWidth << "\n"; }
+    VectorWidth = refinedWidth;
+  }
 
   Report() << "loopVecPass: Vectorize " << L.getName() << " with VW: " << VectorWidth << " , Dependence Distance: " << depDist
          << " and TripAlignment: " << tripAlign << "\n";
@@ -209,7 +223,6 @@ LoopVectorizer::vectorizeLoop(Loop &L) {
   Region LoopRegion(LoopRegionImpl);
 
   VectorizationInfo vecInfo(*F, VectorWidth, LoopRegion);
-
 
 // Check reduction patterns of vector loop phis
   // configure initial shape for induction variable
@@ -283,7 +296,7 @@ LoopVectorizer::vectorizeLoop(Loop &L) {
     errs() << "-- EOF --\n";
   }
 
-  IF_DEBUG F->dump();
+  IF_DEBUG Dump(*F);
   assert(L.getLoopPreheader());
 
   // control conversion
@@ -318,7 +331,7 @@ LoopVectorizer::vectorizeLoop(Loop &L) {
     errs() << "-- Vectorized --\n";
     for (const BasicBlock * BB : PreparedLoop->blocks()) {
       const BasicBlock * vecB = cast<const BasicBlock>(vecMap[BB]);
-      vecB->dump();
+      Dump(*vecB);
     }
     errs() << "-- EOF --\n";
   }
@@ -347,7 +360,7 @@ bool LoopVectorizer::runOnFunction(Function &F) {
 
   if (getenv("RV_DISABLE")) return false;
 
-  IF_DEBUG { errs() << " -- module before RV --\n"; F.getParent()->dump(); }
+  IF_DEBUG { errs() << " -- module before RV --\n"; Dump(*F.getParent()); }
 
   if (enableDiagOutput) Report() << "loopVecPass: run on " << F.getName() << "\n";
   bool Changed = false;
@@ -379,7 +392,7 @@ bool LoopVectorizer::runOnFunction(Function &F) {
   for (auto * L : loops) Changed |= vectorizeLoopOrSubLoops(*L);
 
 
-  IF_DEBUG { errs() << " -- module after RV --\n"; F.getParent()->dump(); }
+  IF_DEBUG { errs() << " -- module after RV --\n"; Dump(*F.getParent()); }
 
   // cleanup
   reda.reset();

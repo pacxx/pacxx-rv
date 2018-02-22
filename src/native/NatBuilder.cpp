@@ -23,6 +23,7 @@
 #include "rv/transform/redTools.h"
 #include "rv/analysis/reductionAnalysis.h"
 #include "rv/region/Region.h"
+#include "rv/rvDebug.h"
 
 #include "rvConfig.h"
 #include "ShuffleBuilder.h"
@@ -291,7 +292,7 @@ void NatBuilder::vectorize(bool embedRegion, ValueToValueMapTy * vecInstMap) {
   IF_DEBUG_NAT {
     errs() << "-- Vectorized IR: --\n";
     for (auto *oldBB : oldBlocks) {
-      getVectorValue(oldBB)->dump();
+      Dump(*getVectorValue(oldBB));
     }
     errs() << "-- End of Vectorized IR: --\n";
   }
@@ -618,7 +619,10 @@ void NatBuilder::copyInstruction(Instruction *const inst, unsigned laneIdx) {
 static
 bool
 NeedsGuarding(Instruction & inst) {
-  return isa<LoadInst>(inst) || isa<StoreInst>(inst);
+  return inst.mayReadOrWriteMemory();
+
+  // if (isa<CallInst>(inst)) return cast<CallInst>(inst).mayHaveSideEffects();
+  // return isa<LoadInst>(inst) || isa<StoreInst>(inst) || isa<AtomicCmpXchgInst>(inst);
 }
 
 static
@@ -885,10 +889,6 @@ NatBuilder::vectorizeAlignCall(CallInst *rvCall) {
     mapScalarValue(rvCall, requestScalarValue(vecArg));
 }
 
-static bool HasSideEffects(CallInst &call) {
-  return call.mayHaveSideEffects();
-}
-
 void NatBuilder::vectorizeCallInstruction(CallInst *const scalCall) {
   Value * callee = scalCall->getCalledValue();
   StringRef calleeName = callee->getName();
@@ -966,7 +966,7 @@ void NatBuilder::vectorizeCallInstruction(CallInst *const scalCall) {
     Value *predicate = vecInfo.getPredicate(*scalCall->getParent());
     assert(predicate && "expected predicate!");
     assert(predicate->getType()->isIntegerTy(1) && "predicate must be i1 type!");
-    bool needCascade = !isa<Constant>(predicate) && HasSideEffects(*scalCall);
+    bool needCascade = !isa<Constant>(predicate) && scalCall->mayHaveSideEffects();
 
     // scalar replication function
     auto replFunc = [this,scalCall](IRBuilder<> & builder, size_t lane) -> Value* {
@@ -1417,7 +1417,7 @@ void NatBuilder::createInterleavedMemory(Type *vecType, unsigned alignment, std:
   if (isPseudoInter && !load) {
     Value *srcAddr = cast<StoreInst>(srcs->front())->getPointerOperand();
     if (pseudointerValueMap.count(srcAddr)) {
-      PseudointerValueVector &pseudoValues = pseudointerValueMap[srcAddr];
+      LaneValueVector &pseudoValues = pseudointerValueMap[srcAddr];
       for (unsigned i = 1; i < pseudoValues.size(); ++i) {
         values->push_back(pseudoValues[i]);
       }
@@ -1737,9 +1737,9 @@ Value *NatBuilder::requestScalarValue(Value *const value, unsigned laneIdx, bool
     IF_DEBUG {
       errs() << "Extracting a scalar value from a vector:\n";
       errs() << "Original Value: ";
-      value->dump();
+      Dump(*value);
       errs() << "Vector Value: ";
-      mappedVal->dump();
+      Dump(*mappedVal);
     };
 
     // if the mappedVal is a alloca instruction, create a GEP instruction
@@ -1771,7 +1771,7 @@ Value *NatBuilder::requestScalarValue(Value *const value, unsigned laneIdx, bool
 
 llvm::Value *
 NatBuilder::buildGEP(GetElementPtrInst *const gep, bool buildScalar, unsigned laneIdx) {
-  BasicBlockVector &mappedBlocks = getMappedBlocks(gep->getParent());
+  BasicBlockVector mappedBlocks = getMappedBlocks(gep->getParent());
   BasicBlock *insertBlock = builder.GetInsertBlock();
   auto insertPoint = builder.GetInsertPoint();
   setInsertionToDomBlockEnd(builder, mappedBlocks);
@@ -1849,7 +1849,7 @@ NatBuilder::requestVectorBitCast(BitCastInst *const bc) {
 
   ++numVecBCs;
 
-  BasicBlockVector &mappedBlocks = getMappedBlocks(bc->getParent());
+  BasicBlockVector mappedBlocks = getMappedBlocks(bc->getParent());
   BasicBlock *insertBlock = builder.GetInsertBlock();
   auto insertPoint = builder.GetInsertPoint();
   setInsertionToDomBlockEnd(builder, mappedBlocks);
@@ -1874,7 +1874,7 @@ Value *NatBuilder::requestScalarBitCast(llvm::BitCastInst *const bc, unsigned la
 
   ++numScalBCs;
 
-  BasicBlockVector &mappedBlocks = getMappedBlocks(bc->getParent());
+  BasicBlockVector mappedBlocks = getMappedBlocks(bc->getParent());
   BasicBlock *insertBlock = builder.GetInsertBlock();
   auto insertPoint = builder.GetInsertPoint();
   setInsertionToDomBlockEnd(builder, mappedBlocks);
@@ -2578,8 +2578,15 @@ Value *NatBuilder::getScalarValue(Value *const value, unsigned laneIdx) {
   } else return nullptr;
 }
 
-BasicBlockVector &NatBuilder::getMappedBlocks(BasicBlock *const block) {
+BasicBlockVector
+NatBuilder::getMappedBlocks(BasicBlock *const block) {
   auto blockIt = basicBlockMap.find(block);
+  if (region && !region->contains(block)) {
+    BasicBlockVector blocks;
+    blocks.push_back(const_cast<BasicBlock*>(block));
+    return blocks;
+  }
+
   assert(blockIt != basicBlockMap.end() && "no mapped blocks for block!");
   return blockIt->second;
 }
@@ -2653,7 +2660,7 @@ bool NatBuilder::shouldVectorize(Instruction *inst) {
         const VectorShape &retShape = getVectorShape(*inst);
         if (retShape.isUniform()) {
           errs() << "Warning: Uniform return in Function with Vector Type!\n";
-          inst->dump();
+          Dump(*inst);
         }
       };
       return true;
@@ -2762,7 +2769,7 @@ bool NatBuilder::isPseudointerleaved(Instruction *inst, Value *addr, int byteSiz
         StoreInst *store = dyn_cast<StoreInst>(prevInst);
         load = dyn_cast<LoadInst>(prevInst);
 
-        if (call && HasSideEffects(*call)) {
+        if (call && call->mayHaveSideEffects()) {
           erase = true;
           break;
         }
