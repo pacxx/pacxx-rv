@@ -1,14 +1,12 @@
 #include "rv/analysis/DFG.h"
 #include "llvm/IR/CFG.h"
 
-namespace rv {
-
+namespace rv{
 #ifndef _MSC_VER
 template<> char DFGBaseWrapper<true>::ID = 0;
 template<> char DFGBaseWrapper<false>::ID = 0;
 #endif
 
-namespace rv{
 template<>
 bool DFGBaseWrapper<true>::runOnFunction(llvm::Function& F)
 {
@@ -27,7 +25,6 @@ bool DFGBaseWrapper<false>::runOnFunction(llvm::Function& F)
     mDFGBase = new DFGBase<false>(tree);
     mDFGBase->create(F);
     return false;
-}
 }
 
 
