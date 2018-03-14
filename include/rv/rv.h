@@ -72,7 +72,8 @@ public:
               llvm::LoopInfo& loopInfo,
               llvm::PostDominatorTree& postDomTree,
               llvm::DominatorTree& domTree,
-              llvm::BranchProbabilityInfo * pbInfo = nullptr);
+   //           llvm::BranchProbabilityInfo * pbInfo = nullptr);
+               llvm::BranchProbabilityInfo * pbInfo);
 
     //
     // Produce vectorized instructions
