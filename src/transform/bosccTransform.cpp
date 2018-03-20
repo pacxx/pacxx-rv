@@ -417,9 +417,10 @@ bosccHeuristic(BranchInst & branch, double & regProb, size_t & regScore, const R
   if (onFalseLegal) { //  && postDomTree.dominates(onTrueBlock, onFalseBlock)) {
     onFalseScore = getDomRegionScore(*onFalseBlock);
   }
-
-  const double maxRatio = GetValue<double>("BOSCC_T", 0.14);
-  const size_t minScore = GetValue<size_t>("BOSCC_LIMIT", 17);
+  
+  // Empirically setting for PACXX (original rv setting is 0.14/17) TODO find a better heuristic 
+  const double maxRatio = GetValue<double>("BOSCC_T", 0.32);
+  const size_t minScore = GetValue<size_t>("BOSCC_LIMIT", 100);
 
   IF_DEBUG_BOSCC { errs() << "BOSCC_T " << maxRatio << " BOSCC_LIMIT " << minScore << "\n"; }
 
@@ -452,10 +453,10 @@ bosccHeuristic(BranchInst & branch, double & regProb, size_t & regScore, const R
 }
 
 double
-GetEdgeProb(BasicBlock & start, BasicBlock & end) {
+GetEdgeProb(BasicBlock & start, unsigned IndexInSuccessors) {
   // use BranchProbabilityInfo if available
   if (pbInfo) {
-    auto prob = pbInfo->getEdgeProbability(&start, &end);
+    auto prob = pbInfo->getEdgeProbability(&start, IndexInSuccessors);
     if (prob.isZero()) {
       return 0.0;
     } else if (!prob.isUnknown()) {
@@ -519,6 +520,7 @@ computeDispersion(RatioMap & dispMap) {
 
       // keep computing a new result from the blocks predecessors
       double inProb;
+      /*
       if (vecInfo.getVectorShape(*pred->getTerminator()).isUniform()) {
         // there is no dispersion at uniform branches -> keep predecessor ratio
         // this is an overapproximation that may lead to block ratios >> 1.0
@@ -527,6 +529,17 @@ computeDispersion(RatioMap & dispMap) {
         // the predecessor disperses control ratios
         inProb = dispMap[pred] * GetEdgeProb(*pred, *block);
       }
+      */
+      //GetEdgeProb(*pred, *block)compute all the paths from pred to block while we only need the direct one to avoid repetitive computation
+      //No need for checking uniform
+      unsigned int IndexInSuccessors;
+      // find the index of block in pred´s successors
+      for (succ_iterator I = succ_begin(pred), E = succ_end(pred); I != E; ++I)
+         if (*I == block) {
+           IndexInSuccessors = I.getSuccessorIndex();
+           break;
+         }
+      inProb = dispMap[pred] * GetEdgeProb(*pred, IndexInSuccessors);
       ratio += inProb;
     }
 
